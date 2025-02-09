@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Notes Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+        #menu {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        label, input {
+            display: block;
+            margin: 5px 0;
+            color: white;
+        }
+        #graph-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        .node {
+            stroke-width: 1.5px;
+        }
+        .link {
+            stroke-opacity: 0.5;
+        }
+        .label {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <input type="file" id="folderInput" webkitdirectory directory multiple accept=".md">
+        <label>Node Color: <input type="color" id="nodeColor" value="#ffffff"></label>
+        <label>Link Color: <input type="color" id="linkColor" value="#ffffff"></label>
+    </div>
+
+    <div id="graph-container"></div>
+
+    <script>
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        const svg = d3.select("#graph-container")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .call(d3.zoom().scaleExtent([0.1, 4]).on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            }))
+            .append("g");
+
+        const g = svg.append("g");
+
+        const simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id).distance(100))
+            .force("charge", d3.forceManyBody().strength(-200))
+            .force("center", d3.forceCenter(width / 2, height / 2));
+
+        let graphData = { nodes: [], links: [] };
+
+        document.getElementById('folderInput').addEventListener('change', handleFolderUpload);
+        document.getElementById('nodeColor').addEventListener('input', updateColors);
+        document.getElementById('linkColor').addEventListener('input', updateColors);
+
+        function handleFolderUpload(event) {
+            const files = [...event.target.files].filter(file => file.name.endsWith('.md')); // Only allow markdown files
+            let notes = {};
+
+            const readPromises = files.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        const filename = file.webkitRelativePath.replace(/^.*[\\\/]/, '').replace(".md", "");
+                        notes[filename] = content;
+                        resolve();
+                    };
+                    reader.readAsText(file);
+                });
+            });
+
+            Promise.all(readPromises).then(() => {
+                buildGraph(notes);
+            });
+        }
+
+        function buildGraph(notes) {
+            const nodes = new Set();
+            const links = [];
+
+            Object.keys(notes).forEach(note => {
+                nodes.add(note);
+                const content = notes[note];
+                const matches = content.match(/\[\[(.*?)\]\]/g);
+
+                if (matches) {
+                    matches.forEach(match => {
+                        const linkedNote = match.replace(/\[\[|\]\]/g, '');
+                        if (notes[linkedNote]) {
+                            nodes.add(linkedNote);
+                            links.push({ source: note, target: linkedNote });
+                        }
+                    });
+                }
+            });
+
+            graphData.nodes = Array.from(nodes).map(n => ({ id: n }));
+            graphData.links = links;
+
+            drawGraph(graphData);
+        }
+
+        function drawGraph(graph) {
+            g.selectAll("*").remove();
+
+            const link = g.append("g")
+                .selectAll("line")
+                .data(graph.links)
+                .enter().append("line")
+                .attr("class", "link")
+                .style("stroke", document.getElementById('linkColor').value);
+
+            const node = g.append("g")
+                .selectAll("circle")
+                .data(graph.nodes)
+                .enter().append("circle")
+                .attr("class", "node")
+                .attr("r", 10)
+                .style("fill", document.getElementById('nodeColor').value)
+                .call(drag(simulation));
+
+            const label = g.append("g")
+                .selectAll("text")
+                .data(graph.nodes)
+                .enter().append("text")
+                .attr("class", "label")
+                .attr("dx", 12)
+                .attr("dy", 4)
+                .text(d => d.id)
+                .style("fill", "white");
+
+            simulation.nodes(graph.nodes).on("tick", () => {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node.attr("cx", d => d.x).attr("cy", d => d.y);
+                label.attr("x", d => d.x).attr("y", d => d.y);
+            });
+
+            simulation.force("link").links(graph.links);
+            simulation.alpha(1).restart();
+        }
+
+        function updateColors() {
+            d3.selectAll(".node").style("fill", document.getElementById('nodeColor').value);
+            d3.selectAll(".link").style("stroke", document.getElementById('linkColor').value);
+        }
+
+        function drag(simulation) {
+            return d3.drag()
+                .on("start", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                })
+                .on("drag", (event, d) => {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                })
+                .on("end", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                });
+        }
+    </script>
+</body>
+</html>
