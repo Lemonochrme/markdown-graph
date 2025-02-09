@@ -1,2 +1,3 @@
 # markdown-graph
-Markdown Graph Viewer
+
+Markdown Graph Viewer: display markdown notes in the form of a dynamic graph.
