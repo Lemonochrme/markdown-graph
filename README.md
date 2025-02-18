@@ -1,4 +1,4 @@
-# markdown-graph
+# Markdown Notes Graph Viewer
 
 Markdown Graph Viewer: display markdown notes in the form of a dynamic graph.
 
