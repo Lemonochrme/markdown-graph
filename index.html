@@ -1,153 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Markdown Notes 3D Graph</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://d3js.org/d3.v5.min.js"></script>
-  <script src="https://unpkg.com/3d-force-graph"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: Arial, sans-serif;
-    }
-    body {
-      background-color: #121212;
-      overflow: hidden;
-    }
-    .debug-controls {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(30, 30, 30, 0.9);
-      padding: 10px;
-      border-radius: 8px;
-      z-index: 10;
-    }
-    label, input {
-      display: block;
-      margin: 5px 0;
-      color: white;
-    }
-    #graph-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 1;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdown Notes 3D Graph</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://unpkg.com/3d-force-graph"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background-color: #121212;
+            overflow: hidden;
+        }
+        .debug-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 10;
+        }
+        label, input {
+            display: block;
+            margin: 5px 0;
+            color: white;
+        }
+        #graph-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+    </style>
 </head>
 <body>
-  <div class="debug-controls">
-    <label>
-      Upload Folder:
-      <input type="file" id="folderInput" webkitdirectory directory multiple accept=".md" />
-    </label>
-    <label>
-      Node Color:
-      <input type="color" id="nodeColor" value="#ffffff" />
-    </label>
-    <label>
-      Link Color:
-      <input type="color" id="linkColor" value="#ffffff" />
-    </label>
-  </div>
+    <div class="debug-controls">
+        <label>
+            Upload Folder:
+            <input type="file" id="folderInput" webkitdirectory directory multiple accept=".md" />
+        </label>
+        <label>
+            Node Color:
+            <input type="color" id="nodeColor" value="#ffffff" />
+        </label>
+        <label>
+            Link Color:
+            <input type="color" id="linkColor" value="#ffffff" />
+        </label>
+        <label>
+            Node Size:
+            <input type="range" id="nodeSize" min="1" max="10" value="5" />
+        </label>
+        <label>
+            Link Width:
+            <input type="range" id="linkWidth" min="1" max="10" value="1" />
+        </label>
+    </div>
 
-  <div id="graph-container"></div>
+    <div id="graph-container"></div>
 
-  <script>
-    let graphData = { nodes: [], links: [] };
+    <script>
+        let graphData = { nodes: [], links: [] };
 
-    document.getElementById('folderInput').addEventListener('change', handleFileUpload);
-    document.getElementById('nodeColor').addEventListener('input', updateColors);
-    document.getElementById('linkColor').addEventListener('input', updateColors);
+        document.getElementById('folderInput').addEventListener('change', handleFileUpload);
+        document.getElementById('nodeColor').addEventListener('input', updateColors);
+        document.getElementById('linkColor').addEventListener('input', updateColors);
+        document.getElementById('nodeSize').addEventListener('input', updateSizes);
+        document.getElementById('linkWidth').addEventListener('input', updateSizes);
 
-    function handleFileUpload(event) {
-      const files = [...event.target.files].filter(file => file.name.endsWith('.md'));
-      let notes = {};
+        function handleFileUpload(event) {
+            const files = [...event.target.files].filter(file => file.name.endsWith('.md'));
+            let notes = {};
 
-      const readPromises = files.map(file => {
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const content = e.target.result;
-            const filename = file.name.replace(".md", "");
-            notes[filename] = content;
-            resolve();
-          };
-          reader.readAsText(file);
-        });
-      });
+            const readPromises = files.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const content = e.target.result;
+                        const filename = file.name.replace(".md", "");
+                        notes[filename] = content;
+                        resolve();
+                    };
+                    reader.readAsText(file);
+                });
+            });
 
-      Promise.all(readPromises).then(() => {
-        buildGraph(notes);
-      });
-    }
-
-    function buildGraph(notes) {
-      const nodes = new Map();
-      const links = [];
-
-      Object.keys(notes).forEach(note => {
-        if (!nodes.has(note)) {
-          // Create a node with the note's content.
-          nodes.set(note, { id: note, size: 1, content: notes[note] });
+            Promise.all(readPromises).then(() => {
+                buildGraph(notes);
+            });
         }
 
-        const content = notes[note];
-        const matches = content.match(/\[\[(.*?)\]\]/g);
-        if (matches) {
-          matches.forEach(match => {
-            const linkedNote = match.replace(/\[\[|\]\]/g, '');
-            if (!nodes.has(linkedNote) && notes[linkedNote]) {
-              nodes.set(linkedNote, { id: linkedNote, size: 1, content: notes[linkedNote] });
-            }
-            if (nodes.has(linkedNote)) {
-              nodes.get(linkedNote).size += 1;
-              nodes.get(note).size += 1;
-              links.push({ source: note, target: linkedNote });
-            }
-          });
+        function buildGraph(notes) {
+            const nodes = new Map();
+            const links = [];
+
+            Object.keys(notes).forEach(note => {
+                if (!nodes.has(note)) {
+                    nodes.set(note, { id: note, size: 1, content: notes[note] });
+                }
+
+                const content = notes[note];
+                const matches = content.match(/\[\[(.*?)\]\]/g);
+                if (matches) {
+                    matches.forEach(match => {
+                        const linkedNote = match.replace(/\[\[|\]\]/g, '');
+                        if (!nodes.has(linkedNote) && notes[linkedNote]) {
+                            nodes.set(linkedNote, { id: linkedNote, size: 1, content: notes[linkedNote] });
+                        }
+                        if (nodes.has(linkedNote)) {
+                            nodes.get(linkedNote).size += 1;
+                            nodes.get(note).size += 1;
+                            links.push({ source: note, target: linkedNote });
+                        }
+                    });
+                }
+            });
+
+            graphData.nodes = Array.from(nodes.values());
+            graphData.links = links;
+
+            draw3DGraph(graphData);
         }
-      });
 
-      graphData.nodes = Array.from(nodes.values());
-      graphData.links = links;
+        function draw3DGraph(graph) {
+            document.getElementById('graph-container').innerHTML = "";
 
-      draw3DGraph(graphData);
-    }
+            const Graph = ForceGraph3D()(document.getElementById('graph-container'))
+                .graphData(graph)
+                .nodeLabel('id')
+                .nodeVal(d => Math.log2(d.size + 1) * parseInt(document.getElementById('nodeSize').value))
+                .linkWidth(parseInt(document.getElementById('linkWidth').value))
+                .backgroundColor("#121212")
+                .onNodeClick(node => {
+                    const noteData = graphData.nodes.find(n => n.id === node.id);
+                    const noteContent = noteData && noteData.content ? noteData.content : "Content not available.";
+                    window.alert(`Note: ${node.id}\nContent: ${noteContent}`);
+                });
 
-    function draw3DGraph(graph) {
-      document.getElementById('graph-container').innerHTML = "";
+            Graph.cameraPosition({ x: 0, y: 0, z: 300 });
+            window.Graph3D = Graph;
+        }
 
-      const Graph = ForceGraph3D()(document.getElementById('graph-container'))
-        .graphData(graph)
-        .nodeLabel('id')
-        .nodeVal(d => Math.log2(d.size + 1) * 5)
-        .backgroundColor("#121212")
-        .onNodeClick(node => {
-          const noteData = graphData.nodes.find(n => n.id === node.id);
-          const noteContent = noteData && noteData.content ? noteData.content : "Content not available.";
-          window.alert(`Note: ${node.id}\nContent: ${noteContent}`);
-        });
+        function updateColors() {
+            if (window.Graph3D) {
+                window.Graph3D.nodeColor(() => document.getElementById('nodeColor').value);
+                window.Graph3D.linkColor(() => document.getElementById('linkColor').value);
+            }
+        }
 
-      // Removed custom forces so that the graph can auto-center.
-      // If you wish to add custom forces, ensure the camera is adjusted accordingly.
-      Graph.cameraPosition({ x: 0, y: 0, z: 300 });
-      window.Graph3D = Graph;
-    }
-
-    function updateColors() {
-      if (window.Graph3D) {
-        window.Graph3D.nodeColor(() => document.getElementById('nodeColor').value);
-        window.Graph3D.linkColor(() => document.getElementById('linkColor').value);
-      }
-    }
-  </script>
+        function updateSizes() {
+            if (window.Graph3D) {
+                window.Graph3D.nodeVal(d => Math.log2(d.size + 1) * parseInt(document.getElementById('nodeSize').value));
+                window.Graph3D.linkWidth(parseInt(document.getElementById('linkWidth').value));
+            }
+        }
+    </script>
 </body>
 </html>
